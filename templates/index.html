@@ -1,0 +1,142 @@
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Accident Risk Prediction</title>
+        <link rel="stylesheet" href="/static/styles.css">
+    </head>
+    <body>
+
+        <h1>Accident Risk Prediction</h1>
+
+        <div class="container">
+            <label for="vehicle">Select Vehicle Type:</label>
+            <select id="vehicle">
+                <option value="car">Car</option>
+                <option value="bike">Bike</option>
+                <option value="truck">Truck</option>
+                <option value="Bus">Bus</option>
+                <option value="Auto">Auto</option>
+            </select>
+            <!-- <label>Road Type:</label> -->
+            <!-- <select name="road_type" required>
+                <option value="0">Urban Road</option>
+                <option value="1">Rural Road</option>
+                <option value="2">Expressway</option>
+                <option value="3">Highway</option>
+            </select> -->
+            <label>Road Condition:</label>
+            <select name="road_condition" required>
+                <option value=0>Good</option>
+                <option value=1>Slippery</option>
+                <option value=2>Under Construction</option>
+                <option value=3>Bad</option>
+            </select>
+            <button id="startBtn">Start Monitoring</button>
+            <button id="stopBtn" disabled>Stop Monitoring</button>
+
+            <div id="status">Status: Waiting...</div>
+            <div id="counter">Location Updates: 0</div>
+
+            <div id="risk-level">Risk Level: <span id="risk-text" class="risk-safe">Safe</span></div>
+        </div>
+        <div id="notification-container"></div>
+        <script>
+            let updateCount = 0;
+            let monitoring = false;
+            let intervalId = null;
+        
+            const startBtn = document.getElementById("startBtn");
+            const stopBtn = document.getElementById("stopBtn");
+            const statusEl = document.getElementById("status");
+            const counterEl = document.getElementById("counter");
+            const riskText = document.getElementById("risk-text");
+            const notificationContainer = document.getElementById("notification-container");
+        
+            startBtn.addEventListener("click", () => {
+                monitoring = true;
+                startBtn.disabled = true;
+                stopBtn.disabled = false;
+                statusEl.innerText = "Status: Monitoring...";
+        
+                intervalId = setInterval(() => {
+                    if (navigator.geolocation) {
+                        navigator.geolocation.getCurrentPosition(position => {
+                            const lat = position.coords.latitude;
+                            const lon = position.coords.longitude;
+        
+                            updateCount++;
+                            counterEl.innerText = `Location Updates: ${updateCount}`;
+        
+                            const vehicle = document.getElementById("vehicle").value;
+                            // const roadType = document.querySelector("select[name='road_type']").value;
+                            const roadCondition = document.querySelector("select[name='road_condition']").value;
+        
+                            fetch("/predict", {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({
+                                    lat: lat,
+                                    lon: lon,
+                                    vehicle: vehicle,
+                                    // road_type: roadType,
+                                    road_condition: roadCondition
+                                })
+                            })
+                            .then(res => res.json())
+                            .then(data => {
+                                console.log(data.risk_level);
+                                // const prediction = data.risk_level; // 0 = safe, 1 = moderate, 2 = high
+                                const prediction = 0; 
+                                // const prediction = 0; // 0 = safe, 1 = moderate, 2 = high
+                                const risk = prediction === 2 ? "high" : prediction === 1 ? "moderate" : "safe";
+                                updateRiskPrediction(risk);
+                            })
+                            .catch(err => {
+                                console.error("Prediction error:", err);
+                            });
+                        }, error => {
+                            console.error("Geolocation error:", error);
+                            statusEl.innerText = "Status: Location access denied.";
+                        });
+                    } else {
+                        statusEl.innerText = "Status: Geolocation not supported.";
+                    }
+                }, 5000); // every 5 seconds
+            });
+        
+            stopBtn.addEventListener("click", () => {
+                monitoring = false;
+                startBtn.disabled = false;
+                stopBtn.disabled = true;
+                statusEl.innerText = "Status: Stopped Monitoring";
+                clearInterval(intervalId);
+            });
+        
+            function updateRiskPrediction(risk) {
+                riskText.innerText = risk.charAt(0).toUpperCase() + risk.slice(1);
+                riskText.className = `risk-${risk}`;
+        
+                const notification = document.createElement("div");
+                notification.classList.add("notification");
+                if (risk === "high") {
+                    notification.classList.add("red");
+                } else if (risk === "moderate") {
+                    notification.classList.add("yellow");
+                }
+                // No class added for "safe" — just a plain notification box
+
+                notification.innerHTML = `  
+                    <div class="icon">⚠️</div>
+                    <div class="message">${risk === "high" ? "High risk detected!" : risk === "moderate" ? "Moderate risk detected!" : "You're safe!"}</div>
+                    <button class="close-btn" onclick="this.parentElement.remove()">❌</button>
+                `;
+                notificationContainer.appendChild(notification);
+        
+                // Auto-dismiss after 5 seconds
+                setTimeout(() => notification.remove(), 5000);
+            }
+        </script>
+    </body>
+    </html>
